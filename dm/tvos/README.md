@@ -53,7 +53,7 @@ The user observed the Diablo II and loading screens. The diagnostic BC fallback 
 was then killed by tvOS with `per-process-limit` (JetsamEvent 2026-10-14 19:50:35).
 This is **not yet a playable/stable game milestone**. The completed fast-preset ASTC pack subsequently passed validation and reached the
 character selection screen without the previous loading-stage kill. A 1920×1080
-frame was captured on-device. Actual gameplay and long-session stability remain unverified.
+frame was captured on-device. Later testing reached actual gameplay and in-game settings; long-session stability and complete gameplay/input coverage remain unverified.
 
 All 6927 base shaders and 285 framebuffer-fetch variants compiled successfully for
 tvOS and were transferred. All 46 original RomFS files match their source sizes
@@ -63,9 +63,9 @@ moving stamps to an ordinary plist in Caches. The subsequent launch reached rend
 
 ## Remaining work / limits
 
-- ASTC is deployed (27,215 textures; archive 994,556,849 bytes). Retest actual gameplay
-  and longer-session memory; this first functional pack uses the fast encoding preset.
-- Extended 8BitDo controller detection was verified, but gameplay input is unverified.
+- ASTC is deployed (27,215 textures; archive 994,556,849 bytes). Expand gameplay testing
+  and measure longer-session memory; this first functional pack uses the fast encoding preset.
+- Extended 8BitDo controller detection and the fix for A returning to the system home screen were verified. Full input mapping and reconnection still need testing.
 - Saves are currently in Caches and purgeable. Durable save sync/recovery,
   save-before-background, audio interruptions and controller reconnection need testing.
 - Native ZR behavior is retained; the optional free-town-portal shortcut is disabled.
@@ -89,7 +89,7 @@ The toolchain is Apple's downloaded Metal.xctoolchain, and the target is explici
 Use only the b-<CHAIN> directory for deployment, excluding the sibling module cache.
 
 For A15, use the existing `dm/tools/astc_pack.py` and `casc_overlay.py pack` flow,
-then `astc_pack.py finalize`. Run `gen_romfs_overlay.py` with DM_ASTC_PACK pointing
+then `astc_pack.py finalize`. Run `dm/tvos/gen_romfs_overlay.py` with DM_ASTC_PACK pointing
 to the finalized pack and a separate tvOS output path (not ios/Gen).
 
 Device paths, relative to org.example.d2rmobile.tv's appDataContainer:
@@ -104,6 +104,35 @@ Launch with environment `DM_TV_SHOT_SECONDS=60` for one diagnostic frame capture
 under `Library/Caches/D2R/frame.png`. It captures a real presented frame through
 the existing renderer callback; the log reports the presentation count and file size.
 This is a diagnostic switch, not a user-facing upload/download screen.
+
+## Update — 2026-10-15
+
+I confirmed that settings dividers crossed the next row's text on TV. Native
+controller rows are 100 units high, but the shared touch profile placed dividers
+at 150. This is a layout mismatch, not evidence that 16:9 alone causes the issue.
+
+The new `dm/tvos/gen_romfs_overlay.py` entry point restores divider offset 90 in
+both console and handheld profiles. The custom page retains its 180-unit rows
+and explicitly uses offset 150. It reuses the existing generator with temporary
+function overrides; the iOS generator and target are unchanged.
+
+Profile geometry checks and the check that original iOS behavior is retained
+passed. Standard/ASTC overlays and annotation variants generated successfully.
+After deployment and restart, I confirmed the display looked correct on TV.
+Every page, language and font profile has not yet been visually retested; no new
+post-fix screenshot is included. Generated game content is excluded from Git.
+Regenerate into a separate output directory with the existing `DM_ASTC_PACK`,
+deploy the resulting `_astc` directory and restart. No full texture conversion
+or full game-data upload is required for this update.
+
+I also tried fixed 1600×900 3D rendering (`DM_3D_SCALE=1.0`, dynamic scaling off).
+The game launched but later exited with signal 9. No conclusive system crash
+report was obtained for that run, so memory pressure or heat is not established
+as the cause. Initial scale 0.75 with dynamic scaling enabled has been restored;
+fixed 900p is not being promoted as a stable default.
+
+These device results remain based on the local ea86e79 port. The published
+b94670c-based branch has not received a full app rebuild/device regression.
 
 ## Sharing package
 
