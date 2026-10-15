@@ -1,4 +1,5 @@
 #include <TargetConditionals.h>
+#include <TargetConditionals.h>
 // 崩溃现场：打印出错地址、pc、lr（换成模块内偏移）与寄存器；缺页钩子分发。
 // 只放信号处理本身：诊断功能（探针 / UI 消息 / 采样）在 diag.c，本文件不依赖它们（图形单测只链本文件）。
 // Crash state: prints the faulting address, pc, lr (converted to module-relative offsets) and the registers; dispatches page fault hooks.
@@ -149,6 +150,7 @@ static void on_crash(int sig, siginfo_t *si, void *uc_) {
 // 备用栈随线程退出释放：pthread 键的析构在线程退出时调用（先停用备用栈再 free）。游戏会频繁起短命线程，不释放每个漏 64 KiB。
 // The signal alternate stack is per thread: every guest thread must call this when it starts running (only then can the crash state be printed on the alternate stack on a stack overflow)
 // The alternate stack is released when the thread exits: the pthread key destructor is called at thread exit (disable the alternate stack first, then free). The game frequently starts short-lived threads, and without releasing each one leaks 64 KiB.
+#if !TARGET_OS_TV
 static pthread_key_t g_altstack_key;
 static pthread_once_t g_altstack_once = PTHREAD_ONCE_INIT;
 static void altstack_free(void *p) { stack_t off = {.ss_flags = SS_DISABLE}; sigaltstack(&off, 0); free(p); }
@@ -159,9 +161,17 @@ void crash_thread_init(void) {
     stack_t ss = {.ss_sp = malloc(65536), .ss_size = 65536}; sigaltstack(&ss, 0);
     pthread_setspecific(g_altstack_key, ss.ss_sp);
 }
+#else
+// tvOS has no alternate signal stack API; retain crash handlers on the normal stack.
+void crash_thread_init(void) {}
+#endif
 void crash_install(void) {
     crash_thread_init();
-    struct sigaction sa = {.sa_sigaction = on_crash, .sa_flags = SA_SIGINFO | SA_ONSTACK};
+    struct sigaction sa = {.sa_sigaction = on_crash, .sa_flags = SA_SIGINFO
+#if !TARGET_OS_TV
+        | SA_ONSTACK
+#endif
+};
     sigaction(SIGALRM, &sa, 0);
     // 两种看门狗都只在测试显式设了 DM_WATCH / DM_WATCH_STALL 时开：产品（玩家从桌面启动，无环境变量）一个不开。
     // 读代码查到：iOS main.m 缺省 setenv DM_WATCH=30 → 玩家启动 30 s 被 SIGALRM 杀；无进展看门狗缺省 15 s → 暂停菜单（拍停）15 s 被杀
